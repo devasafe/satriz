@@ -1,0 +1,109 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { motion } from "motion/react";
+
+// Duração de cada fase (subir e sair). Um lugar só pra ajustar a velocidade —
+// o conteúdo que entra usa o mesmo valor (via CSS var) pra aparecer em sincronia.
+const DUR = 0.5;
+
+// "S" oficial do monograma (glyph real do Bricolage ExtraBold).
+const S_PATH =
+  "M49.031976744186046 72.0Q40.84593023255814 72.0 35.85755813953488 68.86627906976744Q30.869186046511626 65.73255813953489 30.357558139534884 59.27325581395349L39.375 56.26744186046512Q39.63081395348837 60.29651162790698 42.508720930232556 62.27906976744186Q45.38662790697674 64.26162790697674 49.60755813953489 64.26162790697674Q53.57267441860465 64.26162790697674 55.68313953488372 62.8546511627907Q57.793604651162795 61.447674418604656 57.793604651162795 59.59302325581396Q57.793604651162795 57.48255813953489 55.139534883720934 56.395348837209305Q52.48546511627907 55.30813953488372 48.32848837209302 54.34883720930233Q45.13081395348837 53.58139534883721 42.06104651162791 52.68604651162791Q38.991279069767444 51.79069767441861 36.497093023255815 50.35174418604652Q34.002906976744185 48.912790697674424 32.56395348837209 46.64244186046512Q31.125 44.372093023255815 31.125 40.918604651162795Q31.125 35.09883720930233 35.56976744186046 31.549418604651166Q40.01453488372093 28.0 48.39244186046511 28.0Q56.706395348837205 28.0 61.27906976744186 31.51744186046512Q65.85174418604652 35.03488372093024 66.17151162790698 40.662790697674424L56.96220930232558 43.28488372093024Q56.89825581395349 39.639534883720934 54.65988372093024 37.720930232558146Q52.42151162790698 35.80232558139535 48.32848837209302 35.80232558139535Q44.68313953488372 35.80232558139535 42.76453488372093 37.01744186046512Q40.84593023255814 38.23255813953489 40.84593023255814 40.02325581395349Q40.84593023255814 41.55813953488372 42.18895348837209 42.549418604651166Q43.531976744186046 43.54069767441861 45.7703488372093 44.21220930232559Q48.008720930232556 44.88372093023256 50.758720930232556 45.52325581395349Q53.508720930232556 46.09883720930233 56.450581395348834 46.96220930232559Q59.39244186046511 47.82558139534884 61.91860465116279 49.264534883720934Q64.44476744186046 50.70348837209303 66.04360465116278 53.06976744186046Q67.64244186046511 55.43604651162791 67.64244186046511 59.08139534883721Q67.64244186046511 65.02906976744187 62.94186046511628 68.51453488372093Q58.241279069767444 72.0 49.031976744186046 72.0Z";
+
+type Fase = "idle" | "cobrir" | "coberto" | "revelar";
+type Ctx = { navegar: (href: string) => void };
+const TransitionCtx = createContext<Ctx>({ navegar: () => {} });
+
+/** Hook pra disparar a transição de tela de dentro de qualquer link. */
+export const useTransicao = () => useContext(TransitionCtx);
+
+export default function PageTransition({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [fase, setFase] = useState<Fase>("idle");
+  const destino = useRef<string | null>(null);
+
+  // Publica a duração pro CSS: a animação de entrada do conteúdo (.pagein)
+  // dura o mesmo que a cortina saindo, então o conteúdo vai surgindo junto.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--page-dur", `${DUR}s`);
+  }, []);
+
+  const navegar = useCallback(
+    (href: string) => {
+      if (href === pathname) return; // já estamos aqui
+      destino.current = href;
+      setFase("cobrir"); // sobe cobrindo — SÓ navega quando estiver coberto
+    },
+    [pathname]
+  );
+
+  function aoTerminar() {
+    if (fase === "cobrir") {
+      // Tela coberta: troca a rota (por trás, sem flash) e força o topo já —
+      // scroll-behavior "auto" evita o scroll suave animado que "sobe" a página.
+      const html = document.documentElement;
+      html.style.scrollBehavior = "auto";
+      if (destino.current) router.push(destino.current);
+      window.scrollTo(0, 0);
+      // NÃO revela ainda: fica coberto até a rota nova montar (senão a cortina
+      // abriria mostrando a página antiga, que ainda não trocou por baixo).
+      setFase("coberto");
+    } else if (fase === "revelar") {
+      setFase("idle");
+      // Restaura o scroll suave (pros links de âncora) só depois que assentou.
+      setTimeout(() => {
+        document.documentElement.style.scrollBehavior = "";
+      }, 300);
+    }
+  }
+
+  // A nova rota montou (pathname bateu no destino) → dá 1 frame pra pintar e
+  // só então abre a cortina, revelando já o conteúdo novo.
+  useEffect(() => {
+    if (fase === "coberto" && destino.current && pathname === destino.current) {
+      destino.current = null;
+      const id = requestAnimationFrame(() =>
+        requestAnimationFrame(() => setFase("revelar"))
+      );
+      return () => cancelAnimationFrame(id);
+    }
+  }, [pathname, fase]);
+
+  const yAlvo =
+    fase === "cobrir" || fase === "coberto" ? "0%" : fase === "revelar" ? "-100%" : "100%";
+  // easeIn subindo + easeOut saindo → no ponto coberto a cortina está em
+  // velocidade máxima: contínuo, sem sensação de parada no meio.
+  const ease = fase === "cobrir" ? "easeIn" : "easeOut";
+  const coberto = fase === "cobrir" || fase === "coberto";
+
+  return (
+    <TransitionCtx.Provider value={{ navegar }}>
+      {children}
+
+      {fase !== "idle" && (
+        <motion.div
+          className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-ink"
+          initial={{ y: "100%" }}
+          animate={{ y: yAlvo }}
+          transition={{ duration: DUR, ease }}
+          onAnimationComplete={aoTerminar}
+        >
+          <motion.svg
+            width={80}
+            height={80}
+            viewBox="0 0 100 100"
+            role="img"
+            aria-label="Satriz Club"
+            animate={{ opacity: coberto ? 1 : 0, scale: coberto ? 1 : 0.85 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+          >
+            <path d={S_PATH} fill="var(--color-flush)" />
+          </motion.svg>
+        </motion.div>
+      )}
+    </TransitionCtx.Provider>
+  );
+}
