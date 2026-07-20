@@ -86,14 +86,18 @@ function Blob({ progress }: { progress: Progress }) {
 
 function BracoBlob({ index, progress }: { index: number; progress: Progress }) {
   const mesh = useRef<Mesh>(null);
+  const { size } = useThree();
   const ang = (BRACOS[index].ang * Math.PI) / 180;
   useFrame(() => {
     if (!mesh.current) return;
+    // No celular retrato os braços saem menores e mais próximos do núcleo,
+    // senão projetam gigantes e vazam pelas laterais (com os nomes cortados).
+    const mobile = size.width < 640;
     const s5 = scene5At(progress.current);
-    const R = 1.7; // maior que o raio do núcleo → os braços saem de dentro dele
+    const R = mobile ? 1.2 : 1.7; // maior que o raio do núcleo → os braços saem de dentro dele
     mesh.current.position.x += (Math.cos(ang) * R * s5 - mesh.current.position.x) * 0.15;
     mesh.current.position.y += (Math.sin(ang) * R * s5 - mesh.current.position.y) * 0.15;
-    const sc = 0.65 * s5;
+    const sc = (mobile ? 0.42 : 0.65) * s5;
     mesh.current.scale.setScalar(mesh.current.scale.x + (sc - mesh.current.scale.x) * 0.15);
     mesh.current.visible = s5 > 0.01 || mesh.current.scale.x > 0.01;
     mesh.current.rotation.y += 0.01;
@@ -196,7 +200,7 @@ export default function Scene3D() {
               const spots: [number, number][] = [[1, -1], [1, 1], [-1, 1], [-1, -1]];
               const [sx, sy] = spots[i] ?? [0, 0]; // protege contra serviço extra sem posição
               return (
-                <span key={s} style={{ transform: `translate(-50%,-50%) translate(${sx * 300}px, ${sy * 180}px)` }} className="absolute left-1/2 top-1/2 whitespace-nowrap rounded-full border border-line bg-ink-2/70 px-5 py-2.5 font-mono text-sm text-bone backdrop-blur">{s}</span>
+                <span key={s} style={{ transform: `translate(-50%,-50%) translate(calc(${sx} * min(300px, 34vw)), calc(${sy} * min(180px, 22vh)))` }} className="absolute left-1/2 top-1/2 whitespace-nowrap rounded-full border border-line bg-ink-2/70 px-5 py-2.5 font-mono text-sm text-bone backdrop-blur">{s}</span>
               );
             })}
           </div>
@@ -207,7 +211,7 @@ export default function Scene3D() {
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.28em] text-flush">como a gente faz</span>
         </div>
         {ETAPAS.map((e, i) => (
-          <div key={e.n} ref={(el) => { etapaRefs.current[i] = el; }} style={{ opacity: 0, top: e.top, [e.side]: "12%" } as React.CSSProperties} className={`pointer-events-none absolute max-w-xs ${e.side === "right" ? "text-left" : "text-right"}`}>
+          <div key={e.n} ref={(el) => { etapaRefs.current[i] = el; }} style={{ opacity: 0, top: e.top, [e.side]: "8%" } as React.CSSProperties} className={`pointer-events-none absolute max-w-[13rem] sm:max-w-xs ${e.side === "right" ? "text-left" : "text-right"}`}>
             <div className="font-mono text-xs tracking-[0.2em] text-flush">{e.n}</div>
             <h3 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-bone md:text-4xl">{e.t}</h3>
             <p className="mt-1 text-sm text-bone-dim">{e.d}</p>
@@ -226,13 +230,14 @@ export default function Scene3D() {
         </div>
         {BRACOS.map((b, i) => {
           const a = (b.ang * Math.PI) / 180;
-          // raio igual em x e y → o nome cai no MEIO do mini-blob (que está a ~1.7 unidades)
-          const x = Math.cos(a) * 330;
-          const y = -Math.sin(a) * 330;
+          // raio igual em x e y → o nome cai no MEIO do mini-blob (que está a ~1.7 unidades).
+          // O raio encolhe em telas estreitas (min com vw) pra não sair pela lateral no celular.
+          const ux = Math.cos(a).toFixed(3);
+          const uy = (-Math.sin(a)).toFixed(3);
           return (
-            <div key={b.t} ref={(el) => { bracoRefs.current[i] = el; }} style={{ opacity: 0, transform: `translate(-50%,-50%) translate(${x}px, ${y}px)` }} className="pointer-events-none absolute left-1/2 top-1/2 text-center [text-shadow:0_2px_10px_rgba(0,0,0,0.55)]">
-              <div className="font-display text-xl font-extrabold text-bone">{b.t}</div>
-              <div className="font-mono text-[0.65rem] uppercase tracking-[0.16em] text-bone/75">{b.s}</div>
+            <div key={b.t} ref={(el) => { bracoRefs.current[i] = el; }} style={{ opacity: 0, transform: `translate(-50%,-50%) translate(calc(${ux} * min(330px, 30vw)), calc(${uy} * min(330px, 30vw)))` }} className="pointer-events-none absolute left-1/2 top-1/2 text-center [text-shadow:0_2px_10px_rgba(0,0,0,0.55)]">
+              <div className="font-display text-base font-extrabold text-bone sm:text-xl">{b.t}</div>
+              <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-bone/75 sm:text-[0.65rem]">{b.s}</div>
             </div>
           );
         })}
