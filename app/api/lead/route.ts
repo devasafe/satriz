@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { dbConnect } from "@/lib/mongodb";
 import Lead from "@/lib/models/Lead";
+import { notificarLead } from "@/lib/notify";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,13 +17,17 @@ export async function POST(req: NextRequest) {
     const origem = origensValidas.includes(body?.origem) ? body.origem : "orcamento";
 
     await dbConnect();
-    await Lead.create({
+    const lead = await Lead.create({
       nome,
       contato,
       tipo: String(body?.tipo ?? ""),
       mensagem: String(body?.mensagem ?? ""),
       origem,
     });
+
+    // Notifica em tempo real (Telegram via n8n) sem bloquear a resposta ao
+    // visitante nem depender do n8n estar no ar — o lead já está salvo.
+    void notificarLead(lead);
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {
