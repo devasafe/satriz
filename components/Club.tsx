@@ -42,7 +42,7 @@ export default function Club() {
 
           <div className="mt-8">
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-bone-dim">
-              Vagas abertas
+              Vagas abertas!
             </p>
             <ul className="mt-4 flex flex-wrap gap-2">
               {PAPEIS.map((p) => (
