@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { MeshDistortMaterial } from "@react-three/drei";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import type { Mesh } from "three";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ const scene5At = (p: number) => track(p, [[0.76, 0], [0.79, 1], [0.86, 1], [0.89
 
 function Blob({ progress }: { progress: Progress }) {
   const mesh = useRef<Mesh>(null);
-  const { viewport } = useThree();
+  const { viewport, size } = useThree();
 
   useFrame((state) => {
     if (!mesh.current) return;
@@ -66,7 +66,11 @@ function Blob({ progress }: { progress: Progress }) {
     const t = state.clock.elapsedTime;
     // o blob fica vivo o tempo todo (é o fundo do site) — o painel laranja é
     // opaco e cobre a transição, então o blob não precisa se apagar no fim.
-    const base = (1 - chaos * 0.3) * (1 - scene4 * 0.4) * (1 - scene5 * 0.35);
+    // No celular o núcleo encolhe mais na cena da matriz, pra sobrar espaço
+    // pros braços e os nomes caberem centralizados em cada bola.
+    const mobile = size.width < 640;
+    const base =
+      (1 - chaos * 0.3) * (1 - scene4 * 0.4) * (1 - scene5 * 0.35) * (mobile ? 1 - scene5 * 0.28 : 1);
     const d = chaos * 0.18;
     mesh.current.scale.set(
       base * (1 + d * Math.sin(t * 1.5)),
@@ -94,10 +98,10 @@ function BracoBlob({ index, progress }: { index: number; progress: Progress }) {
     // senão projetam gigantes e vazam pelas laterais (com os nomes cortados).
     const mobile = size.width < 640;
     const s5 = scene5At(progress.current);
-    const R = mobile ? 1.2 : 1.7; // maior que o raio do núcleo → os braços saem de dentro dele
+    const R = mobile ? 1.05 : 1.7; // maior que o raio do núcleo → os braços saem de dentro dele
     mesh.current.position.x += (Math.cos(ang) * R * s5 - mesh.current.position.x) * 0.15;
     mesh.current.position.y += (Math.sin(ang) * R * s5 - mesh.current.position.y) * 0.15;
-    const sc = (mobile ? 0.42 : 0.65) * s5;
+    const sc = (mobile ? 0.34 : 0.65) * s5;
     mesh.current.scale.setScalar(mesh.current.scale.x + (sc - mesh.current.scale.x) * 0.15);
     mesh.current.visible = s5 > 0.01 || mesh.current.scale.x > 0.01;
     mesh.current.rotation.y += 0.01;
@@ -123,6 +127,15 @@ export default function Scene3D() {
   const laranja = useRef<HTMLDivElement>(null);
   const form = useRef<HTMLDivElement>(null);
   const progress = useRef(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     let raf = 0;
@@ -193,30 +206,60 @@ export default function Scene3D() {
         </div>
 
         {/* CENA 3 — serviços */}
-        <div ref={servicos} style={{ opacity: 0 }} className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="relative">
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[280px] whitespace-nowrap font-mono text-[0.7rem] uppercase tracking-[0.28em] text-flush">o que a gente faz</span>
-            {SERVICOS.map((s, i) => {
-              const spots: [number, number][] = [[1, -1], [1, 1], [-1, 1], [-1, -1]];
-              const [sx, sy] = spots[i] ?? [0, 0]; // protege contra serviço extra sem posição
-              return (
-                <span key={s} style={{ transform: `translate(-50%,-50%) translate(calc(${sx} * min(300px, 34vw)), calc(${sy} * min(180px, 22vh)))` }} className="absolute left-1/2 top-1/2 whitespace-nowrap rounded-full border border-line bg-ink-2/70 px-5 py-2.5 font-mono text-sm text-bone backdrop-blur">{s}</span>
-              );
-            })}
-          </div>
+        <div ref={servicos} style={{ opacity: 0 }} className="pointer-events-none absolute inset-0 flex items-center justify-center px-6">
+          {isMobile ? (
+            // Mobile: um balão embaixo do outro, coluna centralizada.
+            <div className="flex flex-col items-center gap-3">
+              <span className="mb-1 whitespace-nowrap font-mono text-[0.7rem] uppercase tracking-[0.28em] text-flush">o que a gente faz</span>
+              {SERVICOS.map((s) => (
+                <span key={s} className="whitespace-nowrap rounded-full border border-line bg-ink-2/70 px-5 py-2.5 font-mono text-sm text-bone backdrop-blur">{s}</span>
+              ))}
+            </div>
+          ) : (
+            // Desktop: distribuídos ao redor do blob (losango).
+            <div className="relative">
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[280px] whitespace-nowrap font-mono text-[0.7rem] uppercase tracking-[0.28em] text-flush">o que a gente faz</span>
+              {SERVICOS.map((s, i) => {
+                const spots: [number, number][] = [[1, -1], [1, 1], [-1, 1], [-1, -1]];
+                const [sx, sy] = spots[i] ?? [0, 0]; // protege contra serviço extra sem posição
+                return (
+                  <span key={s} style={{ transform: `translate(-50%,-50%) translate(${sx * 300}px, ${sy * 180}px)` }} className="absolute left-1/2 top-1/2 whitespace-nowrap rounded-full border border-line bg-ink-2/70 px-5 py-2.5 font-mono text-sm text-bone backdrop-blur">{s}</span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* CENA 4 — processo */}
         <div ref={processo} style={{ opacity: 0 }} className="pointer-events-none absolute inset-x-0 top-24 text-center">
           <span className="font-mono text-[0.7rem] uppercase tracking-[0.28em] text-flush">como a gente faz</span>
         </div>
-        {ETAPAS.map((e, i) => (
-          <div key={e.n} ref={(el) => { etapaRefs.current[i] = el; }} style={{ opacity: 0, top: e.top, [e.side]: "8%" } as React.CSSProperties} className={`pointer-events-none absolute max-w-[13rem] sm:max-w-xs ${e.side === "right" ? "text-left" : "text-right"}`}>
-            <div className="font-mono text-xs tracking-[0.2em] text-flush">{e.n}</div>
-            <h3 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-bone md:text-4xl">{e.t}</h3>
-            <p className="mt-1 text-sm text-bone-dim">{e.d}</p>
-          </div>
-        ))}
+        {ETAPAS.map((e, i) => {
+          // Mobile: cada etapa colada num canto (o balão fica no centro atrás).
+          // Canto inferior-direito sobe um pouco pra não bater no botão do WhatsApp.
+          const corner = [
+            "left-5 top-28 text-left",
+            "right-5 top-28 text-right",
+            "left-5 bottom-28 text-left",
+            "right-5 bottom-32 text-right",
+          ][i] ?? "left-5 top-28 text-left";
+          return (
+            <div
+              key={e.n}
+              ref={(el) => { etapaRefs.current[i] = el; }}
+              style={isMobile ? { opacity: 0 } : ({ opacity: 0, top: e.top } as React.CSSProperties)}
+              className={
+                isMobile
+                  ? `pointer-events-none absolute max-w-[13rem] ${corner}`
+                  : `pointer-events-none absolute max-w-xs ${e.side === "right" ? "right-[8%] text-left" : "left-[8%] text-right"}`
+              }
+            >
+              <div className="font-mono text-xs tracking-[0.2em] text-flush">{e.n}</div>
+              <h3 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-bone [text-shadow:0_2px_12px_rgba(0,0,0,0.6)] md:text-4xl">{e.t}</h3>
+              <p className="mt-1 text-sm text-bone-dim [text-shadow:0_1px_8px_rgba(0,0,0,0.7)]">{e.d}</p>
+            </div>
+          );
+        })}
 
         {/* CENA 5 — matriz */}
         <div ref={matriz} style={{ opacity: 0 }} className="pointer-events-none absolute inset-x-0 top-24 text-center">
@@ -230,12 +273,14 @@ export default function Scene3D() {
         </div>
         {BRACOS.map((b, i) => {
           const a = (b.ang * Math.PI) / 180;
-          // raio igual em x e y → o nome cai no MEIO do mini-blob (que está a ~1.7 unidades).
-          // O raio encolhe em telas estreitas (min com vw) pra não sair pela lateral no celular.
           const ux = Math.cos(a).toFixed(3);
           const uy = (-Math.sin(a)).toFixed(3);
+          // O nome cai no CENTRO da bola. Como a câmera projeta ~20.12vh por
+          // unidade 3D, o raio do braço (R) vira R*20.12vh na tela. Mobile usa
+          // R=1.05 → 21.1vh; desktop mantém o raio original em px.
+          const off = isMobile ? "21.1vh" : "min(330px, 40vw)";
           return (
-            <div key={b.t} ref={(el) => { bracoRefs.current[i] = el; }} style={{ opacity: 0, transform: `translate(-50%,-50%) translate(calc(${ux} * min(330px, 30vw)), calc(${uy} * min(330px, 30vw)))` }} className="pointer-events-none absolute left-1/2 top-1/2 text-center [text-shadow:0_2px_10px_rgba(0,0,0,0.55)]">
+            <div key={b.t} ref={(el) => { bracoRefs.current[i] = el; }} style={{ opacity: 0, transform: `translate(-50%,-50%) translate(calc(${ux} * ${off}), calc(${uy} * ${off}))` }} className="pointer-events-none absolute left-1/2 top-1/2 text-center [text-shadow:0_2px_10px_rgba(0,0,0,0.55)]">
               <div className="font-display text-base font-extrabold text-bone sm:text-xl">{b.t}</div>
               <div className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-bone/75 sm:text-[0.65rem]">{b.s}</div>
             </div>
